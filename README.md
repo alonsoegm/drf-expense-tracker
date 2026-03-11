@@ -221,6 +221,42 @@ docker-compose exec web python manage.py createsuperuser
 - [ ] Scheduled reports
 - [ ] Email notifications
 
+
+## 📖 Learning Path - Stage by Stage
+
+This project is built incrementally. Each stage is tagged for easy navigation:
+
+### Stages
+
+- **[Stage 1: Setup](../../tree/stage-1)** - Django + DRF project setup
+- **[Stage 2: Models](../../tree/stage-2)** - Category & Expense models *(coming soon)*
+- **[Stage 3: Serializers](../../tree/stage-3)** - DRF serializers *(coming soon)*
+- **[Stage 4: ViewSets](../../tree/stage-4)** - CRUD operations *(coming soon)*
+- **[Stage 5: URLs](../../tree/stage-5)** - API routing *(coming soon)*
+- **[Stage 6: Filtering](../../tree/stage-6)** - Search & filters *(coming soon)*
+- **[Stage 7: JWT Auth](../../tree/stage-7)** - Authentication *(coming soon)*
+- **[Stage 8: Permissions](../../tree/stage-8)** - Authorization *(coming soon)*
+- **[Stage 9: Advanced](../../tree/stage-9)** - Statistics & reports *(coming soon)*
+- **[Stage 10: Azure SQL](../../tree/stage-10)** - Database migration *(coming soon)*
+- **[Stage 11: KeyVault](../../tree/stage-11)** - Secrets management *(coming soon)*
+- **[Stage 12: Docker](../../tree/stage-12)** - Containerization *(coming soon)*
+- **[Stage 13: Celery](../../tree/stage-13)** - Async tasks *(coming soon)*
+
+### How to Navigate
+
+**View a specific stage:**
+```bash
+git checkout stage-1  # View stage 1 code
+git checkout stage-2  # View stage 2 code
+```
+
+**Compare stages:**
+```bash
+git diff stage-1 stage-2  # See what changed between stages
+```
+
+**Browse on GitHub:** Click the tags above or use the branch/tag selector.
+
 ## 📝 Code Examples
 
 ### Creating an Expense (POST)

@@ -1,0 +1,26 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203, E266, E501, W503
+max-complexity = 10
+
+# IMPORTANT: Exclude venv and other folders
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    env,
+    .venv,
+    */venv/*,
+    */env/*,
+    */.venv/*,
+    migrations,
+    .eggs,
+    *.egg-info,
+    build,
+    dist,
+    .tox,
+    .mypy_cache,
+    .pytest_cache
+
+filename = *.py
+django-settings-module = expense_tracker.settings

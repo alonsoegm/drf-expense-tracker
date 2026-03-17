@@ -1,0 +1,164 @@
+# .pre-commit-config.yaml
+# Configuration for pre-commit hooks
+#
+# What are Git hooks?
+# - Scripts that run automatically at certain Git events
+# - pre-commit runs BEFORE a commit is created
+# - If any hook fails, the commit is aborted
+#
+# Compare to C#:
+# - Similar to build events in Visual Studio
+# - Like "Pre-build events" that run before compilation
+
+# ============================================================================
+# GENERAL SETTINGS
+# ============================================================================
+default_language_version:
+  python: python3.13
+
+repos:
+  # ==========================================================================
+  # PRE-COMMIT BUILT-IN HOOKS
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Check for files that would conflict on case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Prevent giant files from being committed
+      - id: check-added-large-files
+        args: ['--maxkb=1000']  # Max 1MB
+
+      # Check for merge conflict strings
+      - id: check-merge-conflict
+
+      # Check YAML syntax
+      - id: check-yaml
+        exclude: '^.*\.vscode/.*$'
+
+      # Check JSON syntax
+      - id: check-json
+
+      # Check TOML syntax
+      - id: check-toml
+
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+        exclude: '^.*\.json$'
+
+      # Remove trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Check for debugger imports (pdb, ipdb)
+      - id: debug-statements
+
+      # Detect private keys
+      - id: detect-private-key
+
+  # ==========================================================================
+  # BLACK - Code Formatter
+  # ==========================================================================
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3.13
+        # Automatically formats Python code
+        # Equivalent to running: black .
+
+  # ==========================================================================
+  # ISORT - Import Sorter
+  # ==========================================================================
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+        # Automatically organizes imports
+        # Equivalent to running: isort .
+
+  # ==========================================================================
+  # FLAKE8 - Linter
+  # ==========================================================================
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: ['--config=.flake8']
+        additional_dependencies:
+          - flake8-bugbear
+          - flake8-comprehensions
+        # Checks code quality
+        # Equivalent to running: flake8 .
+
+  # ==========================================================================
+  # MYPY - Type Checker
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        args: [--config-file=mypy.ini]
+        additional_dependencies:
+          - django-stubs
+          - djangorestframework-stubs
+          - Django
+          - djangorestframework
+        # Type checks code
+        # Equivalent to running: mypy .
+
+  # ==========================================================================
+  # DJANGO-SPECIFIC CHECKS
+  # ==========================================================================
+  - repo: https://github.com/adamchainz/django-upgrade
+    rev: 1.16.0
+    hooks:
+      - id: django-upgrade
+        args: [--target-version, "5.0"]
+        # Automatically upgrades Django syntax to newer versions
+        # Suggests modern Django patterns
+
+  # ==========================================================================
+  # ADDITIONAL CHECKS
+  # ==========================================================================
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      # Check for eval() usage (security risk)
+      - id: python-check-blanket-noqa
+
+      # Check for # noqa without error code
+      - id: python-check-blanket-type-ignore
+
+      # Detect common Python syntax errors
+      - id: python-no-eval
+
+      # Detect deprecated/removed mock imports
+      - id: python-use-type-annotations
+
+# ============================================================================
+# CONFIGURATION NOTES
+# ============================================================================
+#
+# How pre-commit works:
+# 1. You run: git commit -m "message"
+# 2. pre-commit runs ALL hooks above
+# 3. If ANY hook fails → commit is aborted
+# 4. You fix the issues
+# 5. Try committing again
+#
+# Auto-fixing hooks (Black, isort):
+# - These hooks MODIFY your files automatically
+# - After they run, you need to git add the changes
+# - Then commit again
+#
+# Checking hooks (flake8, mypy):
+# - These hooks only CHECK (don't modify)
+# - If they fail, you must fix manually
+# - Then commit again
+#
+# Skip hooks (emergency only!):
+# git commit --no-verify -m "message"
+# ⚠️ Use sparingly! Bypasses all checks.

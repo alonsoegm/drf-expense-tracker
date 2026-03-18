@@ -260,6 +260,18 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+        examples = {
+            "create_expense": {
+                "summary": "Create a new expense",
+                "value": {
+                    "category_id": 1,
+                    "amount": 45.50,
+                    "description": "Lunch at restaurant",
+                    "date": "2024-03-19",
+                },
+            }
+        }
+
         read_only_fields = ["id", "user", "username", "created_at", "updated_at"]
 
         extra_kwargs = {

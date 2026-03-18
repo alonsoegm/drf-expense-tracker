@@ -106,6 +106,8 @@ repos:
           - djangorestframework-stubs
           - Django
           - djangorestframework
+          - drf-spectacular
+          - djangorestframework-camel-case
         # Type checks code
         # Equivalent to running: mypy .
 

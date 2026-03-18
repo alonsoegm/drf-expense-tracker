@@ -1,24 +1,55 @@
 """
-URL configuration for expense_tracker project.
+Main URL configuration for expense_tracker project
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+This is the root URL configuration that includes all app URLs.
+
+Compare to C#:
+- This is like Program.cs or Startup.cs where you configure routing
+- app.MapControllers() vs including app URLs
+
+URL Structure:
+/admin/                 → Django admin panel
+/api/                   → All API endpoints (from expenses app)
 """
 
 # Third-party
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 
 urlpatterns = [
+    # Django Admin
     path("admin/", admin.site.urls),
+    # Admin panel at: http://localhost:8000/admin/
+    # Like: /Admin in ASP.NET MVC
+    # API endpoints
+    path("api/", include("expenses.urls")),
+    # Includes all URLs from expenses/urls.py
+    # All API endpoints will be under /api/
+    #
+    # Like in C#:
+    # app.MapControllerRoute(
+    #     name: "api",
+    #     pattern: "api/{controller}/{action}/{id?}"
+    # );
 ]
+
+# ============================================================================
+# FINAL URL STRUCTURE
+# ============================================================================
+#
+# Admin:
+# http://localhost:8000/admin/
+#
+# API Root:
+# http://localhost:8000/api/
+#
+# Categories:
+# http://localhost:8000/api/categories/
+# http://localhost:8000/api/categories/1/
+# http://localhost:8000/api/categories/summary/
+#
+# Expenses:
+# http://localhost:8000/api/expenses/
+# http://localhost:8000/api/expenses/1/
+# http://localhost:8000/api/expenses/recent/
+# http://localhost:8000/api/expenses/statistics/

@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     # Third-party apps
     "rest_framework",
     "drf_spectacular",
+    "django_filters",
     # Local apps
     "expenses",
 ]
@@ -150,6 +151,17 @@ REST_FRAMEWORK = {
         "djangorestframework_camel_case.parser.CamelCaseFormParser",
         "djangorestframework_camel_case.parser.CamelCaseMultiPartParser",
     ],
+    # ========================================================================
+    # FILTERING, SEARCHING, ORDERING - ADD THIS SECTION
+    # ========================================================================
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",  # Filtering
+        "rest_framework.filters.SearchFilter",  # Search
+        "rest_framework.filters.OrderingFilter",  # Ordering
+    ],
+    # Compare to C#:
+    # Similar to adding middleware for query processing
+    # Like: app.UseQueryStringValueProvider()
 }
 
 # ============================================================================
@@ -170,4 +182,19 @@ SPECTACULAR_SETTINGS = {
     # Schema settings
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/",
+    # ========================================================================
+    # CAMELCASE CONFIGURATION
+    # ========================================================================
+    "CAMELIZE_NAMES": True,
+    # Converts schema field names to camelCase
+    # snake_case → camelCase in Swagger UI
+    #
+    # This makes Swagger examples match actual API responses:
+    # category_name → categoryName
+    # created_at → createdAt
+    # updated_at → updatedAt
+    #
+    # Compare to C#:
+    # Like configuring JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    # But for API documentation instead of runtime serialization
 }

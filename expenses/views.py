@@ -19,6 +19,9 @@ Why ViewSets?
 - RESTful by default
 """
 
+# Standard Library
+from textwrap import dedent
+
 # Third-party
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
@@ -27,6 +30,7 @@ from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from .filters import CategoryFilter, ExpenseFilter
 from .models import Category, Expense
 from .serializers import (
     CategoryListSerializer,
@@ -44,9 +48,90 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+    # ========================================================================
+    # FILTERING, SEARCH & ORDERING
+    # ========================================================================
+    filterset_class = CategoryFilter
+    # Connects the CategoryFilter we created
+    # Enables: ?name=Food, ?name__icontains=foo
+
+    search_fields = ["name", "description"]
+    # Search with: ?search=food
+    # Searches in both name AND description fields
+    # Case-insensitive partial match
+    #
+    # Compare to C#:
+    # query.Where(c => c.Name.Contains(search) || c.Description.Contains(search))
+
+    ordering_fields = ["name", "created_at"]
+    # Allow ordering by these fields
+    # Use: ?ordering=name (ascending) or ?ordering=-name (descending)
+    # Multiple: ?ordering=name,-created_at
+
+    ordering = ["name"]
+    # Default ordering if no ?ordering= parameter
+    # List alphabetically by name
+
+    def get_serializer_class(self):
+        """Return different serializers based on action"""
+        if self.action == "list":
+            return CategoryListSerializer
+        return CategorySerializer
+
+    def get_queryset(self):
+        """Customize the queryset"""
+        queryset = Category.objects.all()
+        return queryset
+
     @extend_schema(
         summary="List all categories",
-        description="Returns a paginated list of all expense categories.",
+        description=dedent(
+            """
+            Returns a paginated list of all expense categories.
+
+            **Filtering:**
+            - Filter by exact name: name=Food
+            - Search in name: name__icontains=foo
+
+            **Searching:**
+            - Search in name and description: search=food
+
+            **Ordering:**
+            - Order by name: ordering=name (ascending) or ordering=-name (descending)
+            - Order by date: ordering=created_at or ordering=-created_at
+
+            **Examples:**
+            - /api/categories/?search=transport
+            - /api/categories/?ordering=name
+            - /api/categories/?name__icontains=food
+        """
+        ).strip(),
+        parameters=[
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Search in name and description fields",
+            ),
+            OpenApiParameter(
+                name="ordering",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Order by: name, -name, created_at, -created_at",
+            ),
+            OpenApiParameter(
+                name="name",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by exact name",
+            ),
+            OpenApiParameter(
+                name="name__icontains",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Search in name (case-insensitive)",
+            ),
+        ],
         responses={200: CategoryListSerializer(many=True)},
         tags=["Categories"],
     )
@@ -146,6 +231,37 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
 
+    # ========================================================================
+    # FILTERING, SEARCH & ORDERING
+    # ========================================================================
+    filterset_class = ExpenseFilter
+    # Connects the ExpenseFilter we created
+    # Enables:
+    # - ?category=1
+    # - ?amount_min=50&amount_max=100
+    # - ?date_from=2024-01-01&date_to=2024-12-31
+    # - ?description=grocery
+    # - ?user=1
+
+    search_fields = ["description"]
+    # Search with: ?search=grocery
+    # Searches in description field only
+    # Case-insensitive partial match
+    #
+    # Compare to C#:
+    # query.Where(e => e.Description.Contains(search,
+    #     StringComparison.OrdinalIgnoreCase))
+
+    ordering_fields = ["amount", "date", "created_at"]
+    # Allow ordering by these fields
+    # Use: ?ordering=amount (low to high) or ?ordering=-amount (high to low)
+    # Use: ?ordering=date (oldest first) or ?ordering=-date (newest first)
+    # Multiple: ?ordering=-date,amount (newest first, then by amount)
+
+    ordering = ["-date", "-created_at"]
+    # Default ordering if no ?ordering= parameter
+    # Newest expenses first (most recent date, then most recent created)
+
     def get_serializer_class(self):
         """Use simplified serializer for list view"""
         if self.action == "list":
@@ -157,21 +273,104 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         Optimize queryset with related data
         """
         queryset = Expense.objects.select_related("category", "user")
-        queryset = queryset.order_by("-date", "-created_at")
+        # Don't apply ordering here, let ordering_fields handle it
         return queryset
 
     @extend_schema(
         summary="List all expenses",
-        description="Returns a paginated list of all expenses ordered by date (most recent first).",
-        responses={200: ExpenseListSerializer(many=True)},
+        description=dedent(
+            """
+            Returns a paginated list of all expenses.
+
+            **Filtering:**
+            - By category: ?category=1
+            - By amount range: ?amount_min=50&amount_max=100
+            - By date range: ?date_from=2024-01-01&date_to=2024-12-31
+            - By year: ?date__year=2024
+            - By month: ?date__month=3
+            - By user: ?user=1
+
+            **Searching:**
+            - Search in description: ?search=grocery
+
+            **Ordering:**
+            - By amount: ?ordering=amount (low to high) or ?ordering=-amount (high to low)
+            - By date: ?ordering=date (oldest first) or ?ordering=-date (newest first)
+            - Multiple: ?ordering=-date,amount
+
+            **Complex Examples:**
+            - Food expenses over $50 in March 2024, highest amount first:
+              /api/expenses/?category=1&amount_min=50&date__year=2024&date__month=3&ordering=-amount
+            - Recent groceries:
+              /api/expenses/?search=grocery&date_from=2024-03-01&ordering=-date
+        """
+        ).strip(),
         parameters=[
+            # Filtering parameters
             OpenApiParameter(
-                name="page",
+                name="category",
                 type=OpenApiTypes.INT,
                 location=OpenApiParameter.QUERY,
-                description="Page number for pagination",
+                description="Filter by category ID",
+            ),
+            OpenApiParameter(
+                name="amount_min",
+                type=OpenApiTypes.DECIMAL,
+                location=OpenApiParameter.QUERY,
+                description="Minimum amount (inclusive)",
+            ),
+            OpenApiParameter(
+                name="amount_max",
+                type=OpenApiTypes.DECIMAL,
+                location=OpenApiParameter.QUERY,
+                description="Maximum amount (inclusive)",
+            ),
+            OpenApiParameter(
+                name="date_from",
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="Start date (YYYY-MM-DD)",
+            ),
+            OpenApiParameter(
+                name="date_to",
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="End date (YYYY-MM-DD)",
+            ),
+            OpenApiParameter(
+                name="date__year",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Filter by year (e.g., 2024)",
+            ),
+            OpenApiParameter(
+                name="date__month",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Filter by month (1-12)",
+            ),
+            OpenApiParameter(
+                name="user",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Filter by user ID",
+            ),
+            # Search parameter
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Search in description field",
+            ),
+            # Ordering parameter
+            OpenApiParameter(
+                name="ordering",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Order by: amount, -amount, date, -date, created_at, -created_at (- for descending)",
             ),
         ],
+        responses={200: ExpenseListSerializer(many=True)},
         tags=["Expenses"],
     )
     def list(self, request, *args, **kwargs):

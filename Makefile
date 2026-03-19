@@ -49,8 +49,13 @@ help:
 	@echo "  make clean            Clean cache files"
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
-	@echo "  make test             Run all tests"
-	@echo "  make test-coverage    Run tests with coverage"
+	@echo "  make test                 Run all tests with coverage"
+	@echo "  make test-fast            Run tests without coverage"
+	@echo "  make test-coverage        Generate coverage report"
+	@echo "  make test-cov-open        Run tests and open coverage report"
+	@echo "  make test-models          Run only model tests"
+	@echo "  make test-serializers     Run only serializer tests"
+	@echo "  make test-api             Run only API tests"
 	@echo ""
 	@echo "$(GREEN)Database:$(NC)"
 	@echo "  make reset-db         Reset database (DANGER!)"
@@ -195,16 +200,44 @@ clean:
 # ============================================================================
 .PHONY: test
 test:
-	@echo "$(GREEN)Running tests...$(NC)"
-	$(MANAGE) test
+	@echo "$(GREEN)Running tests with coverage...$(NC)"
+	pytest
+
+.PHONY: test-fast
+test-fast:
+	@echo "$(GREEN)Running tests without coverage...$(NC)"
+	pytest --no-cov
 
 .PHONY: test-coverage
 test-coverage:
 	@echo "$(GREEN)Running tests with coverage...$(NC)"
-	coverage run --source='.' manage.py test
-	coverage report
-	coverage html
+	pytest --cov=expenses --cov-report=html --cov-report=term-missing
 	@echo "$(GREEN)✓ Coverage report: htmlcov/index.html$(NC)"
+
+.PHONY: test-cov-open
+test-cov-open: test-coverage
+	@echo "$(GREEN)Opening coverage report...$(NC)"
+	open htmlcov/index.html || xdg-open htmlcov/index.html || start htmlcov/index.html
+
+.PHONY: test-models
+test-models:
+	@echo "$(GREEN)Running model tests...$(NC)"
+	pytest tests/test_models.py -v
+
+.PHONY: test-serializers
+test-serializers:
+	@echo "$(GREEN)Running serializer tests...$(NC)"
+	pytest tests/test_serializers.py -v
+
+.PHONY: test-api
+test-api:
+	@echo "$(GREEN)Running API tests...$(NC)"
+	pytest tests/test_api_*.py -v
+
+.PHONY: test-watch
+test-watch:
+	@echo "$(GREEN)Running tests in watch mode...$(NC)"
+	ptw -- --testmon
 
 # ============================================================================
 # DATABASE COMMANDS

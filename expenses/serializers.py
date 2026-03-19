@@ -330,13 +330,14 @@ class ExpenseSerializer(serializers.ModelSerializer):
         Example: Check for duplicate expenses
         """
         # Check if similar expense exists (same user, category, amount, date)
-        user = self.context["request"].user  # Get current user from context
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
         category = attrs.get("category")
         amount = attrs.get("amount")
         date = attrs.get("date")
 
         # Only check for duplicates on creation (not updates)
-        if not self.instance:  # self.instance is None for new objects
+        if not self.instance and user and user.is_authenticated:
             similar_expense = Expense.objects.filter(
                 user=user, category=category, amount=amount, date=date
             ).exists()
@@ -374,11 +375,11 @@ class ExpenseSerializer(serializers.ModelSerializer):
         - Custom creation logic
         - Trigger side effects (send email, log, etc.)
         """
-        # Get current user from request context
-        request = self.context.get("request")
-        if request is None:
-            raise serializers.ValidationError("Request context is required.")
-        validated_data["user"] = request.user
+        # Get current user from request context (if not already set by perform_create)
+        if "user" not in validated_data:
+            request = self.context.get("request")
+            if request and hasattr(request, "user") and request.user.is_authenticated:
+                validated_data["user"] = request.user
 
         # Create and return the expense
         expense = Expense.objects.create(**validated_data)

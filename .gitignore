@@ -37,3 +37,8 @@ Thumbs.db
 
 # Development
 requirements-dev.txt  # Don't commit this (optional)
+# Test coverage
+htmlcov/
+.coverage
+.pytest_cache/
+.tox/

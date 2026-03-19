@@ -220,7 +220,36 @@ class CategoryViewSet(viewsets.ModelViewSet):
     )
     def destroy(self, request, *args, **kwargs):
         """Delete a category"""
-        return super().destroy(request, *args, **kwargs)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except Exception:
+            return Response(
+                {"detail": "Cannot delete category with associated expenses."},
+                status=400,
+            )
+
+    @extend_schema(
+        summary="Category summary",
+        description="Returns a summary of all categories with expense counts.",
+        responses={200: OpenApiTypes.OBJECT},
+        tags=["Categories"],
+    )
+    @action(detail=False, methods=["get"])
+    def summary(self, request: Request) -> Response:
+        """Get summary of all categories with expense counts"""
+        categories = self.get_queryset()
+        data = {
+            "total_categories": categories.count(),
+            "categories": [
+                {
+                    "id": cat.id,
+                    "name": cat.name,
+                    "expense_count": cat.get_expense_count(),
+                }
+                for cat in categories
+            ],
+        }
+        return Response(data)
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):

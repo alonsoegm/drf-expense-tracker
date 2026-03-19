@@ -108,6 +108,7 @@ repos:
           - djangorestframework
           - drf-spectacular
           - djangorestframework-camel-case
+          - django-filter
         # Type checks code
         # Equivalent to running: mypy .
 

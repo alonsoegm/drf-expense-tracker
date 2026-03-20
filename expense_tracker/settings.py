@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 # Standard Library
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,6 +43,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
     "django_filters",
+    "rest_framework_simplejwt",
+    "djangorestframework_camel_case",
     # Local apps
     "expenses",
 ]
@@ -131,13 +134,18 @@ REST_FRAMEWORK = {
     # Default pagination (returns paginated results)
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,  # 10 items per page
-    # Default permissions (allow anyone for now, will add auth later)
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",  # No authentication required yet
-    ],
-    # Default authentication (we'll add JWT later)
+    # ========================================================================
+    # AUTHENTICATION - UPDATED FOR JWT
+    # ========================================================================
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",  # For browsable API
+        "rest_framework_simplejwt.authentication.JWTAuthentication",  # JWT!
+        "rest_framework.authentication.SessionAuthentication",  # Keep for browsable API
+    ],
+    # ========================================================================
+    # PERMISSIONS - UPDATED TO REQUIRE AUTH
+    # ========================================================================
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",  # Changed from AllowAny!
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Renderers con camelCase
@@ -168,33 +176,105 @@ REST_FRAMEWORK = {
 # DRF-SPECTACULAR (Swagger/OpenAPI) CONFIGURATION
 # ============================================================================
 
+# ============================================================================
+# DRF-SPECTACULAR (Swagger/OpenAPI) CONFIGURATION
+# ============================================================================
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Expense Tracker API",
-    "DESCRIPTION": "A REST API for personal expense tracking",
+    "DESCRIPTION": "A REST API for personal expense tracking with JWT authentication",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     # Swagger UI settings
     "SWAGGER_UI_SETTINGS": {
         "deepLinking": True,
-        "persistAuthorization": True,
+        "persistAuthorization": True,  # Remember auth between page reloads
         "displayOperationId": True,
     },
     # Schema settings
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/",
-    # ========================================================================
-    # CAMELCASE CONFIGURATION
-    # ========================================================================
     "CAMELIZE_NAMES": True,
-    # Converts schema field names to camelCase
-    # snake_case → camelCase in Swagger UI
-    #
-    # This makes Swagger examples match actual API responses:
-    # category_name → categoryName
-    # created_at → createdAt
-    # updated_at → updatedAt
-    #
-    # Compare to C#:
-    # Like configuring JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    # But for API documentation instead of runtime serialization
+    # ========================================================================
+    # JWT AUTHENTICATION CONFIGURATION - ADD THIS
+    # ========================================================================
+    "AUTHENTICATION_WHITELIST": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    # Security scheme for JWT
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "jwtAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "JWT token authentication. Get your token from /api/auth/login/ or /api/auth/register/",
+            }
+        }
+    },
+    # Default security (all endpoints require JWT)
+    "SECURITY": [{"jwtAuth": []}],
 }
+
+# ============================================================================
+# JWT AUTHENTICATION CONFIGURATION
+# ============================================================================
+
+SIMPLE_JWT = {
+    # Token lifetimes
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    # Access token expires after 60 minutes
+    # Short-lived for security
+    # Like: JwtSecurityTokenHandler.TokenLifetime in C#
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    # Refresh token expires after 7 days
+    # Long-lived to avoid frequent re-login
+    # User stays logged in for a week
+    # Token types
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    # Authorization: Bearer <token>
+    # Standard HTTP Bearer authentication
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+    # Header name in Django (prefixed with HTTP_)
+    # Token claims
+    "USER_ID_FIELD": "id",
+    # Which user field to include in token
+    "USER_ID_CLAIM": "user_id",
+    # Name of the claim in JWT payload
+    # Token behavior
+    "ROTATE_REFRESH_TOKENS": True,
+    # Issue new refresh token on refresh
+    # Increases security
+    "BLACKLIST_AFTER_ROTATION": True,
+    # Blacklist old refresh tokens
+    # Prevents token reuse
+    "UPDATE_LAST_LOGIN": True,
+    # Update user.last_login on token generation
+    # Algorithm
+    "ALGORITHM": "HS256",
+    # HMAC with SHA-256
+    # Like: SecurityAlgorithms.HmacSha256 in C#
+    # Signing key (from SECRET_KEY)
+    "SIGNING_KEY": SECRET_KEY,
+    # Use Django's SECRET_KEY to sign tokens
+    # In production, use environment variable
+    # Token verification
+    "VERIFY_SIGNATURE": True,
+    # Always verify token signature
+    "VERIFY_EXP": True,
+    # Verify expiration time
+    "LEEWAY": 0,
+    # No leeway for expiration (strict)
+    # JSON encoder
+    "JSON_ENCODER": None,
+}
+
+# Compare to C# TokenValidationParameters:
+# new TokenValidationParameters {
+#     ValidateIssuer = true,
+#     ValidateAudience = true,
+#     ValidateLifetime = true,
+#     ValidateIssuerSigningKey = true,
+#     IssuerSigningKey = new SymmetricSecurityKey(key),
+#     ClockSkew = TimeSpan.Zero
+# }

@@ -23,6 +23,7 @@ Why ViewSets?
 from textwrap import dedent
 
 # Third-party
+from django.db.models import ProtectedError
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import viewsets
@@ -222,7 +223,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
         """Delete a category"""
         try:
             return super().destroy(request, *args, **kwargs)
-        except Exception:
+        except ProtectedError:
             return Response(
                 {"detail": "Cannot delete category with associated expenses."},
                 status=400,
@@ -299,10 +300,28 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Optimize queryset with related data
+        UPDATED: Filter expenses by current user
+
+        Each user can only see their own expenses
+
+        Compare to C#:
+        public IActionResult GetExpenses() {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier).Value;
+            var expenses = _context.Expenses
+                .Where(e => e.UserId == userId)
+                .Include(e => e.Category)
+                .Include(e => e.User)
+                .OrderByDescending(e => e.Date);
+            return Ok(expenses);
+        }
         """
+        # Get base queryset with optimizations
         queryset = Expense.objects.select_related("category", "user")
-        # Don't apply ordering here, let ordering_fields handle it
+
+        # Filter by current authenticated user
+        # request.user is set by JWT authentication
+        queryset = queryset.filter(user=self.request.user)
+
         return queryset
 
     @extend_schema(
@@ -542,7 +561,15 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         summary="Get recent expenses",
-        description="Returns expenses from the last 7 days.",
+        description=dedent(
+            """
+            Returns expenses from the last 7 days for the current user.
+
+            **User Isolation:** Only returns expenses created by the authenticated user.
+
+            **Use case:** Quick overview of recent spending activity.
+        """
+        ).strip(),
         responses={200: ExpenseListSerializer(many=True)},
         tags=["Expenses"],
     )
@@ -552,41 +579,33 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         Custom endpoint: GET /api/expenses/recent/
 
         Returns expenses from last 7 days
+        UPDATED: Filter by current user
         """
         # Standard Library
         from datetime import date, timedelta
 
         seven_days_ago = date.today() - timedelta(days=7)
-        recent_expenses = self.get_queryset().filter(date__gte=seven_days_ago)
+        recent_expenses = self.get_queryset().filter(
+            date__gte=seven_days_ago, user=self.request.user
+        )
 
         serializer = self.get_serializer(recent_expenses, many=True)
         return Response(serializer.data)
 
     @extend_schema(
         summary="Get expense statistics",
-        description="Returns aggregated statistics about all expenses.",
-        responses={
-            200: {
-                "type": "object",
-                "properties": {
-                    "totalAmount": {
-                        "type": "number",
-                        "description": "Sum of all expense amounts",
-                        "example": 1234.56,
-                    },
-                    "count": {
-                        "type": "integer",
-                        "description": "Total number of expenses",
-                        "example": 42,
-                    },
-                    "averageAmount": {
-                        "type": "number",
-                        "description": "Average expense amount",
-                        "example": 29.39,
-                    },
-                },
-            }
-        },
+        description=dedent(
+            """
+            Returns aggregated statistics about all expenses for the current user.
+
+            **User Isolation:** Only calculates statistics for the authenticated user's expenses.
+
+            **Includes:**
+            - Total amount spent
+            - Total number of expenses
+            - Average expense amount
+        """
+        ).strip(),
         examples=[
             OpenApiExample(
                 "Statistics Response",
@@ -601,12 +620,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         """
         Custom endpoint: GET /api/expenses/statistics/
 
+        UPDATED: Calculate statistics for current user only
+
         Returns expense statistics
         """
         # Third-party
         from django.db.models import Avg, Count, Sum
 
-        queryset = self.get_queryset()
+        queryset = self.get_queryset().filter(user=self.request.user)
 
         stats = queryset.aggregate(
             total_amount=Sum("amount"), count=Count("id"), average_amount=Avg("amount")
@@ -618,17 +639,9 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         """
         Set user automatically when creating expense
         """
-        # Third-party
-        from django.contrib.auth.models import User
 
-        user = User.objects.first()
-
-        if not user:
-            user = User.objects.create_user(
-                username="admin", email="admin@example.com", password="admin123"
-            )
-
-        serializer.save(user=user)
+        # Save with current authenticated user
+        serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
         """Update expense without changing user"""

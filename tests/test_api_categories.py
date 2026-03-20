@@ -7,6 +7,7 @@ What are we testing?
 - Response data structure
 - Filtering and search
 - Custom actions
+- Authentication requirement
 
 Compare to C#:
 [Fact]
@@ -31,23 +32,35 @@ from django.urls import reverse
 class TestCategoryList:
     """Tests for GET /api/categories/"""
 
-    def test_list_categories_empty(self, api_client):
-        """Test listing categories when none exist"""
+    def test_list_categories_unauthenticated(self, api_client):
+        """
+        Unauthenticated requests should fail
+
+        Without JWT token → 401 Unauthorized
+        """
         url = reverse("expenses:category-list")
         response = api_client.get(url)
+
+        assert response.status_code == 401
+        assert "detail" in response.data
+
+    def test_list_categories_empty(self, authenticated_client):
+        """Test listing categories when none exist"""
+        url = reverse("expenses:category-list")
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["count"] == 0
         assert response.data["results"] == []
 
-    def test_list_categories(self, api_client, categories):
+    def test_list_categories(self, authenticated_client, categories):
         """
         Test listing all categories
 
         Should return paginated list with simplified serializer
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["count"] == 3
@@ -59,35 +72,35 @@ class TestCategoryList:
         assert "name" in first
         # List serializer shouldn't have these
         assert "description" not in first
-        assert "expenseCount" not in first
+        assert "expense_count" not in first
 
-    def test_filter_by_name(self, api_client, categories):
+    def test_filter_by_name(self, authenticated_client, categories):
         """
         Test filtering by exact name
 
         GET /api/categories/?name=Food
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url, {"name": "Food"})
+        response = authenticated_client.get(url, {"name": "Food"})
 
         assert response.status_code == 200
         assert response.data["count"] == 1
         assert response.data["results"][0]["name"] == "Food"
 
-    def test_filter_by_name_icontains(self, api_client, categories):
+    def test_filter_by_name_icontains(self, authenticated_client, categories):
         """
         Test filtering by name contains (case-insensitive)
 
         GET /api/categories/?name__icontains=tran
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url, {"name__icontains": "tran"})
+        response = authenticated_client.get(url, {"name__icontains": "tran"})
 
         assert response.status_code == 200
         assert response.data["count"] == 1
         assert response.data["results"][0]["name"] == "Transport"
 
-    def test_search_categories(self, api_client, categories):
+    def test_search_categories(self, authenticated_client, categories):
         """
         Test search functionality
 
@@ -96,7 +109,7 @@ class TestCategoryList:
         Should search in name and description
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url, {"search": "food"})
+        response = authenticated_client.get(url, {"search": "food"})
 
         assert response.status_code == 200
         assert response.data["count"] >= 1
@@ -104,14 +117,14 @@ class TestCategoryList:
         names = [cat["name"] for cat in response.data["results"]]
         assert "Food" in names
 
-    def test_ordering_by_name(self, api_client, categories):
+    def test_ordering_by_name(self, authenticated_client, categories):
         """
         Test ordering by name
 
         GET /api/categories/?ordering=name
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url, {"ordering": "name"})
+        response = authenticated_client.get(url, {"ordering": "name"})
 
         assert response.status_code == 200
         results = response.data["results"]
@@ -120,14 +133,14 @@ class TestCategoryList:
         # Should be alphabetically sorted
         assert names == sorted(names)
 
-    def test_ordering_by_name_descending(self, api_client, categories):
+    def test_ordering_by_name_descending(self, authenticated_client, categories):
         """
         Test ordering by name descending
 
         GET /api/categories/?ordering=-name
         """
         url = reverse("expenses:category-list")
-        response = api_client.get(url, {"ordering": "-name"})
+        response = authenticated_client.get(url, {"ordering": "-name"})
 
         assert response.status_code == 200
         results = response.data["results"]
@@ -146,18 +159,14 @@ class TestCategoryList:
 class TestCategoryCreate:
     """Tests for POST /api/categories/"""
 
-    def test_create_category(self, api_client):
+    def test_create_category(self, authenticated_client):
         """
         Test creating a valid category
-
-        Compare to C#:
-        var response = await _client.PostAsJsonAsync("/api/categories", dto);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         """
         url = reverse("expenses:category-list")
         data = {"name": "Health", "description": "Medical expenses"}
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 201
         assert response.data["name"] == "Health"
@@ -165,17 +174,17 @@ class TestCategoryCreate:
         assert "id" in response.data
         assert "created_at" in response.data
 
-    def test_create_category_minimal(self, api_client):
+    def test_create_category_minimal(self, authenticated_client):
         """Test creating category with only required fields"""
         url = reverse("expenses:category-list")
         data = {"name": "Shopping"}
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 201
         assert response.data["name"] == "Shopping"
 
-    def test_create_category_name_too_short(self, api_client):
+    def test_create_category_name_too_short(self, authenticated_client):
         """
         Test validation: name must be at least 3 characters
 
@@ -184,12 +193,12 @@ class TestCategoryCreate:
         url = reverse("expenses:category-list")
         data = {"name": "AB"}  # Too short
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "name" in response.data
 
-    def test_create_category_duplicate_name(self, api_client, category):
+    def test_create_category_duplicate_name(self, authenticated_client, category):
         """
         Test validation: name must be unique
 
@@ -198,19 +207,19 @@ class TestCategoryCreate:
         url = reverse("expenses:category-list")
         data = {"name": category.name}  # Duplicate
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "name" in response.data
 
-    def test_create_category_other_without_description(self, api_client):
+    def test_create_category_other_without_description(self, authenticated_client):
         """
         Test validation: "Other" category requires description
         """
         url = reverse("expenses:category-list")
         data = {"name": "Other"}  # No description
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "description" in response.data
@@ -225,14 +234,14 @@ class TestCategoryCreate:
 class TestCategoryRetrieve:
     """Tests for GET /api/categories/{id}/"""
 
-    def test_retrieve_category(self, api_client, category):
+    def test_retrieve_category(self, authenticated_client, category):
         """
         Test retrieving a single category
 
         Should return full CategorySerializer (not list serializer)
         """
         url = reverse("expenses:category-detail", kwargs={"pk": category.id})
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["id"] == category.id
@@ -244,14 +253,14 @@ class TestCategoryRetrieve:
         assert "created_at" in response.data
         assert "updated_at" in response.data
 
-    def test_retrieve_category_not_found(self, api_client):
+    def test_retrieve_category_not_found(self, authenticated_client):
         """
         Test retrieving non-existent category
 
         Should return 404 Not Found
         """
         url = reverse("expenses:category-detail", kwargs={"pk": 9999})
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 404
 
@@ -265,7 +274,7 @@ class TestCategoryRetrieve:
 class TestCategoryUpdate:
     """Tests for PUT and PATCH /api/categories/{id}/"""
 
-    def test_update_category_put(self, api_client, category):
+    def test_update_category_put(self, authenticated_client, category):
         """
         Test full update (PUT)
 
@@ -274,13 +283,13 @@ class TestCategoryUpdate:
         url = reverse("expenses:category-detail", kwargs={"pk": category.id})
         data = {"name": "Updated Food", "description": "Updated description"}
 
-        response = api_client.put(url, data, format="json")
+        response = authenticated_client.put(url, data, format="json")
 
         assert response.status_code == 200
         assert response.data["name"] == "Updated Food"
         assert response.data["description"] == "Updated description"
 
-    def test_update_category_patch(self, api_client, category):
+    def test_update_category_patch(self, authenticated_client, category):
         """
         Test partial update (PATCH)
 
@@ -289,18 +298,18 @@ class TestCategoryUpdate:
         url = reverse("expenses:category-detail", kwargs={"pk": category.id})
         data = {"description": "New description only"}
 
-        response = api_client.patch(url, data, format="json")
+        response = authenticated_client.patch(url, data, format="json")
 
         assert response.status_code == 200
         assert response.data["name"] == category.name  # Unchanged
         assert response.data["description"] == "New description only"
 
-    def test_update_category_not_found(self, api_client):
+    def test_update_category_not_found(self, authenticated_client):
         """Test updating non-existent category"""
         url = reverse("expenses:category-detail", kwargs={"pk": 9999})
         data = {"name": "Test"}
 
-        response = api_client.patch(url, data, format="json")
+        response = authenticated_client.patch(url, data, format="json")
 
         assert response.status_code == 404
 
@@ -314,22 +323,22 @@ class TestCategoryUpdate:
 class TestCategoryDelete:
     """Tests for DELETE /api/categories/{id}/"""
 
-    def test_delete_category(self, api_client, category):
+    def test_delete_category(self, authenticated_client, category):
         """
         Test deleting a category
 
         Should return 204 No Content
         """
         url = reverse("expenses:category-detail", kwargs={"pk": category.id})
-        response = api_client.delete(url)
+        response = authenticated_client.delete(url)
 
         assert response.status_code == 204
 
         # Verify it's deleted
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
         assert response.status_code == 404
 
-    def test_delete_category_with_expenses(self, api_client, category, user):
+    def test_delete_category_with_expenses(self, authenticated_client, category, user):
         """
         Test deleting category with expenses
 
@@ -347,17 +356,17 @@ class TestCategoryDelete:
         )
 
         url = reverse("expenses:category-detail", kwargs={"pk": category.id})
-        response = api_client.delete(url)
+        response = authenticated_client.delete(url)
 
         # Should fail with 400 or 409 (depends on DRF version)
         assert response.status_code in [400, 409]
 
-    def test_delete_category_not_found(self, api_client):
+    def test_delete_category_not_found(self, authenticated_client):
         """Test deleting non-existent category"""
         url = reverse("expenses:category-detail", kwargs={"pk": 9999})
-        response = api_client.delete(url)
+        response = authenticated_client.delete(url)
 
-        assert response.status_code == 400
+        assert response.status_code == 404
 
 
 # ============================================================================
@@ -369,7 +378,7 @@ class TestCategoryDelete:
 class TestCategorySummary:
     """Tests for GET /api/categories/summary/"""
 
-    def test_summary_action(self, api_client, categories, user):
+    def test_summary_action(self, authenticated_client, categories, user):
         """
         Test custom summary action
 
@@ -390,7 +399,7 @@ class TestCategorySummary:
         )
 
         url = reverse("expenses:category-summary")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert "total_categories" in response.data

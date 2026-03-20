@@ -36,6 +36,8 @@ urlpatterns = [
     #     name: "api",
     #     pattern: "api/{controller}/{action}/{id?}"
     # );
+    # Authentication endpoints - ADD THIS
+    path("api/auth/", include("expenses.authentication.urls")),
     # OpenAPI Schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     # Swagger UI

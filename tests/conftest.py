@@ -1,37 +1,12 @@
 """
 Pytest fixtures and configuration
-
-What are fixtures?
-- Reusable test data and setup code
-- Like [SetUp] methods in xUnit, but more powerful
-- Can be shared across all tests
-- Dependency injection for tests
-
-Compare to C#:
-public class TestFixture : IDisposable {
-    public User TestUser { get; set; }
-
-    public TestFixture() {
-        // Setup
-        TestUser = new User { Username = "testuser" };
-    }
-
-    public void Dispose() {
-        // Cleanup
-    }
-}
-
-[Fact]
-public void TestSomething(TestFixture fixture) {
-    var user = fixture.TestUser;
-    // Use user in test
-}
 """
 
 # Third-party
 import pytest
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # Local
 from expenses.models import Category, Expense
@@ -46,17 +21,8 @@ def api_client():
     """
     Fixture that provides DRF API client
 
-    Usage:
-    def test_something(api_client):
-        response = api_client.get('/api/categories/')
-        assert response.status_code == 200
-
-    Compare to C#:
-    private readonly HttpClient _client;
-
-    public TestClass() {
-        _client = new HttpClient();
-    }
+    Note: This client is NOT authenticated by default
+    Use authenticated_client for authenticated requests
     """
     return APIClient()
 
@@ -71,17 +37,34 @@ def user(db):
     """
     Fixture that creates a test user
 
-    The 'db' parameter is a pytest-django fixture that:
-    - Sets up test database
-    - Rolls back after test
-    - Like [DatabaseFixture] in xUnit
-
-    Usage:
-    def test_something(user):
-        assert user.username == "testuser"
+    Username: testuser
+    Password: testpass123
     """
     return User.objects.create_user(
-        username="testuser", email="test@example.com", password="testpass123"
+        username="testuser",
+        email="test@example.com",
+        password="testpass123",
+        first_name="Test",
+        last_name="User",
+    )
+
+
+@pytest.fixture
+def user2(db):
+    """
+    Fixture that creates a second test user
+
+    For testing user isolation
+
+    Username: testuser2
+    Password: testpass123
+    """
+    return User.objects.create_user(
+        username="testuser2",
+        email="test2@example.com",
+        password="testpass123",
+        first_name="Test2",
+        last_name="User2",
     )
 
 
@@ -89,10 +72,6 @@ def user(db):
 def admin_user(db):
     """
     Fixture that creates an admin user
-
-    Usage:
-    def test_admin_action(admin_user):
-        assert admin_user.is_staff
     """
     return User.objects.create_superuser(
         username="admin", email="admin@example.com", password="adminpass123"
@@ -100,34 +79,78 @@ def admin_user(db):
 
 
 # ============================================================================
-# CATEGORY FIXTURES
+# AUTHENTICATION FIXTURES - NEW!
+# ============================================================================
+
+
+@pytest.fixture
+def user_token(user):
+    """
+    Fixture that provides JWT token for user
+
+    Returns access token string
+
+    Usage:
+    def test_something(api_client, user_token):
+        response = api_client.get('/api/expenses/',
+            HTTP_AUTHORIZATION=f'Bearer {user_token}')
+    """
+    refresh = RefreshToken.for_user(user)
+    return str(refresh.access_token)
+
+
+@pytest.fixture
+def user2_token(user2):
+    """
+    Fixture that provides JWT token for user2
+
+    For testing user isolation
+    """
+    refresh = RefreshToken.for_user(user2)
+    return str(refresh.access_token)
+
+
+@pytest.fixture
+def authenticated_client(api_client, user_token):
+    """
+    Fixture that provides an authenticated API client
+
+    Uses JWT Bearer token authentication
+
+    Usage:
+    def test_protected_endpoint(authenticated_client):
+        response = authenticated_client.get('/api/expenses/')
+        assert response.status_code == 200
+    """
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {user_token}")
+    return api_client
+
+
+@pytest.fixture
+def authenticated_client2(api_client, user2_token):
+    """
+    Fixture that provides authenticated client for user2
+
+    For testing user isolation
+    """
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {user2_token}")
+    return api_client
+
+
+# ============================================================================
+# CATEGORY FIXTURES (unchanged)
 # ============================================================================
 
 
 @pytest.fixture
 def category(db):
-    """
-    Fixture that creates a single category
-
-    Usage:
-    def test_category(category):
-        assert category.name == "Food"
-    """
+    """Fixture that creates a single category"""
     return Category.objects.create(name="Food", description="Food and groceries")
 
 
 @pytest.fixture
 def categories(db):
-    """
-    Fixture that creates multiple categories
-
-    Returns a list of categories
-
-    Usage:
-    def test_multiple_categories(categories):
-        assert len(categories) == 3
-        assert categories[0].name == "Food"
-    """
+    """Fixture that creates multiple categories"""
     return [
         Category.objects.create(name="Food", description="Food and groceries"),
         Category.objects.create(name="Transport", description="Transportation costs"),
@@ -136,7 +159,7 @@ def categories(db):
 
 
 # ============================================================================
-# EXPENSE FIXTURES
+# EXPENSE FIXTURES - UPDATED!
 # ============================================================================
 
 
@@ -145,12 +168,7 @@ def expense(db, category, user):
     """
     Fixture that creates a single expense
 
-    Depends on 'category' and 'user' fixtures
-    pytest automatically resolves dependencies!
-
-    Usage:
-    def test_expense(expense):
-        assert expense.amount == 50.00
+    UPDATED: Uses user fixture (authenticated user)
     """
     return Expense.objects.create(
         user=user,
@@ -164,13 +182,9 @@ def expense(db, category, user):
 @pytest.fixture
 def expenses(db, categories, user):
     """
-    Fixture that creates multiple expenses
+    Fixture that creates multiple expenses for user
 
-    Returns a list of expenses across different categories
-
-    Usage:
-    def test_multiple_expenses(expenses):
-        assert len(expenses) == 5
+    UPDATED: All expenses belong to user
     """
     return [
         Expense.objects.create(
@@ -211,78 +225,55 @@ def expenses(db, categories, user):
     ]
 
 
-# ============================================================================
-# AUTHENTICATED CLIENT FIXTURE
-# ============================================================================
-
-
 @pytest.fixture
-def authenticated_client(api_client, user):
+def user2_expenses(db, categories, user2):
     """
-    Fixture that provides an authenticated API client
+    Fixture that creates expenses for user2
 
-    For now uses session auth (for browsable API)
-    Later we'll add JWT token support
-
-    Usage:
-    def test_protected_endpoint(authenticated_client):
-        response = authenticated_client.get('/api/expenses/')
-        assert response.status_code == 200
+    For testing user isolation
     """
-    api_client.force_authenticate(user=user)
-    return api_client
+    return [
+        Expense.objects.create(
+            user=user2,
+            category=categories[0],
+            amount=100.00,
+            description="User2 grocery",
+            date="2024-03-19",
+        ),
+        Expense.objects.create(
+            user=user2,
+            category=categories[1],
+            amount=75.00,
+            description="User2 transport",
+            date="2024-03-18",
+        ),
+    ]
 
 
-# ============================================================================
-# FIXTURE SCOPES
-# ============================================================================
-#
-# Fixtures can have different scopes:
-#
-# @pytest.fixture(scope='function')  # Default - new instance per test
-# @pytest.fixture(scope='class')     # Shared within test class
-# @pytest.fixture(scope='module')    # Shared within test file
-# @pytest.fixture(scope='session')   # Shared across all tests
-#
-# Example:
-# @pytest.fixture(scope='session')
-# def django_db_setup():
-#     # Expensive setup once per test session
-#     pass
-#
 # ============================================================================
 # FIXTURE COMPARISON
 # ============================================================================
 #
-# pytest fixtures vs C# xUnit:
+# Before Authentication:
+# - api_client: Plain client, worked because AllowAny permission
+# - user: Created but not used for auth
+# - expenses: Created with any user
 #
-# pytest:
-# @pytest.fixture
-# def user(db):
-#     return User.objects.create(...)
+# After Authentication:
+# - api_client: Plain client (for unauthenticated tests)
+# - authenticated_client: Client with JWT token (for protected endpoints)
+# - user_token: JWT token for user
+# - expenses: All belong to authenticated user
+# - user2_expenses: For testing isolation
 #
-# def test_something(user):  # Injected automatically
-#     assert user.username == "testuser"
+# Compare to C# xUnit:
+# public class AuthenticatedTestBase : IClassFixture<WebApplicationFactory> {
+#     protected readonly HttpClient _client;
+#     protected readonly string _token;
 #
-# C# xUnit:
-# public class UserFixture : IDisposable {
-#     public User User { get; set; }
-#     public UserFixture() {
-#         User = new User { Username = "testuser" };
+#     public AuthenticatedTestBase() {
+#         _token = GetJwtToken();
+#         _client.DefaultRequestHeaders.Authorization =
+#             new AuthenticationHeaderValue("Bearer", _token);
 #     }
 # }
-#
-# public class TestClass : IClassFixture<UserFixture> {
-#     private readonly UserFixture _fixture;
-#
-#     public TestClass(UserFixture fixture) {
-#         _fixture = fixture;
-#     }
-#
-#     [Fact]
-#     public void TestSomething() {
-#         Assert.Equal("testuser", _fixture.User.Username);
-#     }
-# }
-#
-# pytest is more concise!

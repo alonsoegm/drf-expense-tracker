@@ -6,8 +6,10 @@ IMPORTANT - camelCase vs snake_case:
 - Request data (what we send): camelCase (like frontend)
   Example: {'categoryId': 1, 'amount': 50.00}
 
-- Response data (what we receive): camelCase (converted by djangorestframework-camel-case)
-  Example: response.data['categoryName'], response.data['createdAt']
+- Response data (what we receive via response.data): snake_case
+  Example: response.data['category_name'], response.data['created_at']
+  Note: camelCase conversion happens at the renderer level (HTTP response body),
+  but response.data returns raw serializer output (snake_case)
 
 - Python code (models, variables): snake_case (Python convention)
   Example: expense.category_id, expense.created_at
@@ -37,24 +39,35 @@ from django.urls import reverse
 class TestExpenseList:
     """Tests for GET /api/expenses/"""
 
-    def test_list_expenses_empty(self, api_client):
-        """Test listing expenses when none exist"""
+    def test_list_expenses_unauthenticated(self, api_client):
+        """
+        Unauthenticated requests should fail
+
+        Without JWT token → 401 Unauthorized
+        """
         url = reverse("expenses:expense-list")
         response = api_client.get(url)
+
+        assert response.status_code == 401
+        assert "detail" in response.data
+
+    def test_list_expenses_empty(self, authenticated_client):
+        """Test listing expenses when user has none"""
+        url = reverse("expenses:expense-list")
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["count"] == 0
         assert response.data["results"] == []
 
-    def test_list_expenses(self, api_client, expenses):
+    def test_list_expenses(self, authenticated_client, expenses):
         """
         Test listing all expenses
 
         Should return paginated list with simplified serializer
-        Response fields in camelCase
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["count"] == 5
@@ -71,14 +84,14 @@ class TestExpenseList:
         # List serializer shouldn't have nested category_detail
         assert "category_detail" not in first
 
-    def test_filter_by_category(self, api_client, expenses, categories):
+    def test_filter_by_category(self, authenticated_client, expenses, categories):
         """
         Test filtering by category
 
         GET /api/expenses/?category=1
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"category": categories[0].id})
+        response = authenticated_client.get(url, {"category": categories[0].id})
 
         assert response.status_code == 200
         # Should have 2 Food expenses
@@ -86,14 +99,14 @@ class TestExpenseList:
         for expense in response.data["results"]:
             assert expense["category_name"] == "Food"
 
-    def test_filter_by_amount_min(self, api_client, expenses):
+    def test_filter_by_amount_min(self, authenticated_client, expenses):
         """
         Test filtering by minimum amount
 
         GET /api/expenses/?amount_min=40
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"amount_min": 40})
+        response = authenticated_client.get(url, {"amount_min": 40})
 
         assert response.status_code == 200
         # Should have expenses >= 40 (45.50 and 50.00)
@@ -101,27 +114,27 @@ class TestExpenseList:
         for expense in response.data["results"]:
             assert Decimal(expense["amount"]) >= Decimal("40")
 
-    def test_filter_by_amount_range(self, api_client, expenses):
+    def test_filter_by_amount_range(self, authenticated_client, expenses):
         """
         Test filtering by amount range
 
         GET /api/expenses/?amount_min=20&amount_max=35
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"amount_min": 20, "amount_max": 35})
+        response = authenticated_client.get(url, {"amount_min": 20, "amount_max": 35})
 
         assert response.status_code == 200
         # Should have expenses between 20-35 (25.00 and 30.00)
         assert response.data["count"] == 2
 
-    def test_filter_by_date_range(self, api_client, expenses):
+    def test_filter_by_date_range(self, authenticated_client, expenses):
         """
         Test filtering by date range
 
         GET /api/expenses/?date_from=2024-03-17&date_to=2024-03-19
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(
+        response = authenticated_client.get(
             url, {"date_from": "2024-03-17", "date_to": "2024-03-19"}
         )
 
@@ -129,7 +142,7 @@ class TestExpenseList:
         # Should have expenses in that range
         assert response.data["count"] == 3
 
-    def test_search_expenses(self, api_client, expenses):
+    def test_search_expenses(self, authenticated_client, expenses):
         """
         Test search functionality
 
@@ -138,7 +151,7 @@ class TestExpenseList:
         Should search in description field
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"search": "grocery"})
+        response = authenticated_client.get(url, {"search": "grocery"})
 
         assert response.status_code == 200
         assert response.data["count"] >= 1
@@ -146,14 +159,14 @@ class TestExpenseList:
         descriptions = [exp["description"] for exp in response.data["results"]]
         assert any("Grocery" in desc or "grocery" in desc for desc in descriptions)
 
-    def test_ordering_by_amount(self, api_client, expenses):
+    def test_ordering_by_amount(self, authenticated_client, expenses):
         """
         Test ordering by amount ascending
 
         GET /api/expenses/?ordering=amount
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"ordering": "amount"})
+        response = authenticated_client.get(url, {"ordering": "amount"})
 
         assert response.status_code == 200
         amounts = [Decimal(exp["amount"]) for exp in response.data["results"]]
@@ -161,14 +174,14 @@ class TestExpenseList:
         # Should be sorted low to high
         assert amounts == sorted(amounts)
 
-    def test_ordering_by_amount_descending(self, api_client, expenses):
+    def test_ordering_by_amount_descending(self, authenticated_client, expenses):
         """
         Test ordering by amount descending
 
         GET /api/expenses/?ordering=-amount
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"ordering": "-amount"})
+        response = authenticated_client.get(url, {"ordering": "-amount"})
 
         assert response.status_code == 200
         amounts = [Decimal(exp["amount"]) for exp in response.data["results"]]
@@ -176,14 +189,14 @@ class TestExpenseList:
         # Should be sorted high to low
         assert amounts == sorted(amounts, reverse=True)
 
-    def test_ordering_by_date(self, api_client, expenses):
+    def test_ordering_by_date(self, authenticated_client, expenses):
         """
         Test ordering by date descending (default)
 
         GET /api/expenses/?ordering=-date
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(url, {"ordering": "-date"})
+        response = authenticated_client.get(url, {"ordering": "-date"})
 
         assert response.status_code == 200
         dates = [exp["date"] for exp in response.data["results"]]
@@ -191,14 +204,14 @@ class TestExpenseList:
         # Should be newest first
         assert dates == sorted(dates, reverse=True)
 
-    def test_complex_filter(self, api_client, expenses, categories):
+    def test_complex_filter(self, authenticated_client, expenses, categories):
         """
         Test combining multiple filters
 
         GET /api/expenses/?category=1&amount_min=30&ordering=-amount
         """
         url = reverse("expenses:expense-list")
-        response = api_client.get(
+        response = authenticated_client.get(
             url,
             {
                 "category": categories[0].id,  # Food
@@ -222,22 +235,21 @@ class TestExpenseList:
 class TestExpenseCreate:
     """Tests for POST /api/expenses/"""
 
-    def test_create_expense(self, api_client, category, user):
+    def test_create_expense(self, authenticated_client, category):
         """
         Test creating a valid expense
 
-        Request body in camelCase (like frontend would send)
-        Response in camelCase
+        Request body in camelCase (parsed by CamelCaseJSONParser)
         """
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 75.50,
             "description": "Test expense",
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 201
         assert Decimal(response.data["amount"]) == Decimal("75.50")
@@ -251,22 +263,22 @@ class TestExpenseCreate:
         assert "updated_at" in response.data
         assert response.data["category_name"] == category.name
 
-    def test_create_expense_minimal(self, api_client, category, user):
+    def test_create_expense_minimal(self, authenticated_client, category):
         """Test creating expense with only required fields"""
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 100.00,
             "description": "Minimal expense",
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 201
         assert response.data["description"] == "Minimal expense"
 
-    def test_create_expense_amount_zero(self, api_client, category):
+    def test_create_expense_amount_zero(self, authenticated_client, category):
         """
         Test validation: amount must be > 0
 
@@ -274,45 +286,45 @@ class TestExpenseCreate:
         """
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 0,
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "amount" in response.data
 
-    def test_create_expense_amount_negative(self, api_client, category):
+    def test_create_expense_amount_negative(self, authenticated_client, category):
         """Test validation: negative amounts not allowed"""
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": -50.00,
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "amount" in response.data
 
-    def test_create_expense_amount_too_large(self, api_client, category):
+    def test_create_expense_amount_too_large(self, authenticated_client, category):
         """Test validation: amount cannot exceed 1,000,000"""
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 1_000_001,
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "amount" in response.data
 
-    def test_create_expense_future_date(self, api_client, category):
+    def test_create_expense_future_date(self, authenticated_client, category):
         """
         Test validation: date cannot be in the future
         """
@@ -320,26 +332,26 @@ class TestExpenseCreate:
         future_date = date.today() + timedelta(days=1)
 
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 50.00,
             "date": str(future_date),
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "date" in response.data
 
-    def test_create_expense_invalid_category(self, api_client):
+    def test_create_expense_invalid_category(self, authenticated_client):
         """Test validation: category must exist"""
         url = reverse("expenses:expense-list")
         data = {
-            "categoryId": 9999,  # camelCase! Non-existent
+            "categoryId": 9999,
             "amount": 50.00,
             "date": "2024-03-19",
         }
 
-        response = api_client.post(url, data, format="json")
+        response = authenticated_client.post(url, data, format="json")
 
         assert response.status_code == 400
         assert "category_id" in response.data or "category" in response.data
@@ -354,15 +366,14 @@ class TestExpenseCreate:
 class TestExpenseRetrieve:
     """Tests for GET /api/expenses/{id}/"""
 
-    def test_retrieve_expense(self, api_client, expense):
+    def test_retrieve_expense(self, authenticated_client, expense):
         """
         Test retrieving a single expense
 
         Should return full ExpenseSerializer with nested data
-        All fields in camelCase
         """
         url = reverse("expenses:expense-detail", kwargs={"pk": expense.id})
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         assert response.data["id"] == expense.id
@@ -379,14 +390,14 @@ class TestExpenseRetrieve:
         assert "created_at" in response.data
         assert "updated_at" in response.data
 
-    def test_retrieve_expense_not_found(self, api_client):
+    def test_retrieve_expense_not_found(self, authenticated_client):
         """
         Test retrieving non-existent expense
 
         Should return 404 Not Found
         """
         url = reverse("expenses:expense-detail", kwargs={"pk": 9999})
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 404
 
@@ -400,28 +411,26 @@ class TestExpenseRetrieve:
 class TestExpenseUpdate:
     """Tests for PUT and PATCH /api/expenses/{id}/"""
 
-    def test_update_expense_put(self, api_client, expense, category):
+    def test_update_expense_put(self, authenticated_client, expense, category):
         """
         Test full update (PUT)
-
-        Request in camelCase, response in camelCase
         """
         url = reverse("expenses:expense-detail", kwargs={"pk": expense.id})
         data = {
-            "categoryId": category.id,  # camelCase!
+            "categoryId": category.id,
             "amount": 99.99,
             "description": "Updated expense",
             "date": "2024-03-18",
         }
 
-        response = api_client.put(url, data, format="json")
+        response = authenticated_client.put(url, data, format="json")
 
         assert response.status_code == 200
         assert Decimal(response.data["amount"]) == Decimal("99.99")
         assert response.data["description"] == "Updated expense"
         assert response.data["date"] == "2024-03-18"
 
-    def test_update_expense_patch(self, api_client, expense):
+    def test_update_expense_patch(self, authenticated_client, expense):
         """
         Test partial update (PATCH)
 
@@ -432,28 +441,28 @@ class TestExpenseUpdate:
 
         data = {"description": "Partially updated"}
 
-        response = api_client.patch(url, data, format="json")
+        response = authenticated_client.patch(url, data, format="json")
 
         assert response.status_code == 200
         assert Decimal(response.data["amount"]) == original_amount  # Unchanged
         assert response.data["description"] == "Partially updated"
 
-    def test_update_expense_amount_only(self, api_client, expense):
+    def test_update_expense_amount_only(self, authenticated_client, expense):
         """Test updating only amount"""
         url = reverse("expenses:expense-detail", kwargs={"pk": expense.id})
         data = {"amount": 123.45}
 
-        response = api_client.patch(url, data, format="json")
+        response = authenticated_client.patch(url, data, format="json")
 
         assert response.status_code == 200
         assert Decimal(response.data["amount"]) == Decimal("123.45")
 
-    def test_update_expense_not_found(self, api_client):
+    def test_update_expense_not_found(self, authenticated_client):
         """Test updating non-existent expense"""
         url = reverse("expenses:expense-detail", kwargs={"pk": 9999})
         data = {"amount": 50.00}
 
-        response = api_client.patch(url, data, format="json")
+        response = authenticated_client.patch(url, data, format="json")
 
         assert response.status_code == 404
 
@@ -467,25 +476,25 @@ class TestExpenseUpdate:
 class TestExpenseDelete:
     """Tests for DELETE /api/expenses/{id}/"""
 
-    def test_delete_expense(self, api_client, expense):
+    def test_delete_expense(self, authenticated_client, expense):
         """
         Test deleting an expense
 
         Should return 204 No Content
         """
         url = reverse("expenses:expense-detail", kwargs={"pk": expense.id})
-        response = api_client.delete(url)
+        response = authenticated_client.delete(url)
 
         assert response.status_code == 204
 
         # Verify it's deleted
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
         assert response.status_code == 404
 
-    def test_delete_expense_not_found(self, api_client):
+    def test_delete_expense_not_found(self, authenticated_client):
         """Test deleting non-existent expense"""
         url = reverse("expenses:expense-detail", kwargs={"pk": 9999})
-        response = api_client.delete(url)
+        response = authenticated_client.delete(url)
 
         assert response.status_code == 404
 
@@ -499,7 +508,7 @@ class TestExpenseDelete:
 class TestExpenseCustomActions:
     """Tests for custom actions on expenses"""
 
-    def test_recent_expenses(self, api_client, user, category):
+    def test_recent_expenses(self, authenticated_client, user, category):
         """
         Test GET /api/expenses/recent/
 
@@ -523,25 +532,24 @@ class TestExpenseCustomActions:
         )
 
         url = reverse("expenses:expense-recent")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         # Should only return recent expenses
         assert len(response.data) == 2
 
-    def test_expense_statistics(self, api_client, expenses):
+    def test_expense_statistics(self, authenticated_client, expenses):
         """
         Test GET /api/expenses/statistics/
 
         Should return aggregated statistics
-        Response fields in camelCase
         """
         url = reverse("expenses:expense-statistics")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
 
-        # Check fields exist (in camelCase!)
+        # Check fields exist
         assert "totalAmount" in response.data or "total_amount" in response.data
         assert "count" in response.data
         assert "averageAmount" in response.data or "average_amount" in response.data
@@ -555,10 +563,10 @@ class TestExpenseCustomActions:
         assert count == 5
         assert total > 0
 
-    def test_statistics_empty(self, api_client):
+    def test_statistics_empty(self, authenticated_client):
         """Test statistics when no expenses exist"""
         url = reverse("expenses:expense-statistics")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == 200
         # Should handle null/empty gracefully

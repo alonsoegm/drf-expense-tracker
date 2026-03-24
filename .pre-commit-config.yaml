@@ -110,6 +110,11 @@ repos:
           - djangorestframework-camel-case
           - django-filter
           - djangorestframework-simplejwt
+          - python-decouple
+          - dj-database-url
+          - django-cors-headers
+          - whitenoise
+          - psycopg2-binary
         # Type checks code
         # Equivalent to running: mypy .
 

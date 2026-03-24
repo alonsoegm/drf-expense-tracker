@@ -1,8 +1,29 @@
 asgiref==3.11.1
+
+# Core Django & DRF
 Django==6.0.3
 djangorestframework==3.16.1
+# Database Drivers
 sqlparse==0.5.5
+# Database Drivers
+# PostgreSQL support (for Azure SQL / local PostgreSQL)
+psycopg2-binary==2.9.11
+# API Documentation
 drf-spectacular==0.29.0
+# Filtering & Search
 django-filter==25.2
+# Authentication
 djangorestframework_simplejwt==5.5.1
 PyJWT==2.12.1
+# CORS Headers (for frontend integration)
+django-cors-headers==4.3.1
+# Environment Variables
+python-decouple==3.8
+# Static Files (production)
+whitenoise==6.6.0
+
+dj-database-url==3.1.2
+
+# Azure Integration (will be used in Stage 10)
+# azure-identity==1.15.0
+# azure-keyvault-secrets==4.7.0

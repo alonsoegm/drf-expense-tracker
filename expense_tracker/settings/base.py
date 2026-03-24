@@ -14,20 +14,25 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 
+# Third-party
+import dj_database_url
+from decouple import Csv, config
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-=3#4!--n#l+=(4k)6yfg7%-ev=kc9u)@^3$^ph57))(&rov1=%"
+SECRET_KEY = config("SECRET_KEY", default="django-insecure-default-key-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="", cast=Csv())
 
 
 # Application definition
@@ -44,14 +49,18 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "django_filters",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "djangorestframework_camel_case",
+    "corsheaders",
     # Local apps
     "expenses",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -79,14 +88,25 @@ TEMPLATES = [
 WSGI_APPLICATION = "expense_tracker.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# ==============================================================================
+# DATABASE CONFIGURATION
+# ==============================================================================
+# Database configuration using DATABASE_URL from environment
+# Similar to connection strings in ASP.NET appsettings.json
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+
+# Default to SQLite for development, can be overridden with DATABASE_URL
+# Examples:
+# - SQLite: sqlite:///db.sqlite3
+# - PostgreSQL: postgresql://user:password@localhost:5432/dbname
+# - Azure SQL: postgresql://user:password@server.postgres.database.azure.com:5432/dbname?sslmode=require
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,  # Connection pooling (600 seconds)
+        conn_health_checks=True,  # Check connection health
+    )
 }
 
 
@@ -268,6 +288,128 @@ SIMPLE_JWT = {
     # JSON encoder
     "JSON_ENCODER": None,
 }
+
+# ==============================================================================
+# CORS CONFIGURATION
+# ==============================================================================
+# Cross-Origin Resource Sharing settings for frontend integration
+# Similar to CORS configuration in ASP.NET Core
+
+# Allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
+
+# Allowed origins from environment variable
+# In development: http://localhost:3000,http://localhost:5173
+# In production: https://yourfrontend.com
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="http://localhost:3000,http://localhost:5173",
+    cast=Csv(),
+)
+
+# Allowed methods
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+# Allowed headers
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+# ==============================================================================
+# STATIC FILES CONFIGURATION
+# ==============================================================================
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.1/howto/static-files/
+# WhiteNoise serves static files in production (similar to wwwroot in ASP.NET)
+
+STATIC_URL = "static/"
+
+# Directory where collectstatic will collect static files for deployment
+# Similar to publishing wwwroot folder in ASP.NET
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Additional locations of static files
+STATICFILES_DIRS: list[str] = [
+    # Add paths to your static files here if needed
+    # Example: BASE_DIR / 'static',
+]
+
+# WhiteNoise storage backend (with compression and caching)
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# ==============================================================================
+# LOGGING CONFIGURATION
+# ==============================================================================
+# Logging configuration for debugging and production monitoring
+# Similar to ILogger in ASP.NET Core
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "filters": {
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+        "file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "logs" / "django.log",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": config("LOG_LEVEL", default="INFO"),
+            "propagate": True,
+        },
+        "expenses": {
+            "handlers": ["console", "file"],
+            "level": config("LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
+    },
+}
+
 
 # Compare to C# TokenValidationParameters:
 # new TokenValidationParameters {
